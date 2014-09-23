@@ -1,10 +1,11 @@
 
 using System;
+using System.Threading;
 using NServiceBus.Persistence;
 using Tryout.Server.Messages.Commands;
 using Tryout.Server.Messages.Events;
 
-namespace Tryout.Server
+namespace Tryout
 {
     using NServiceBus;
 
@@ -14,24 +15,44 @@ namespace Tryout.Server
 	*/
     public class EndpointConfig : IConfigureThisEndpoint, AsA_Server, UsingTransport<RavenDB>
     {
+        /*public void Customize(ConfigurationBuilder builder)
+        {
+            builder.UsePersistence<PLEASE_SELECT_ONE>();
+        }*/
+
         public void Customize(BusConfiguration configuration)
         {
             configuration.Conventions()
                 .DefiningCommandsAs(t => t.Namespace != null && t.Namespace.EndsWith("Commands"))
                 .DefiningEventsAs(t => t.Namespace != null && t.Namespace.EndsWith("Events"));
+            
             configuration.UsePersistence<InMemoryPersistence>();
             configuration.EnableSLAPerformanceCounter(TimeSpan.FromDays(1));
         }
     }
 
-    public class NaiveSomethingHandler :
-        IHandleMessages<DoSomething>
+    public class Ok : IWantToRunWhenBusStartsAndStops
     {
         public IBus Bus { get; set; }
 
-        public void Handle(DoSomething message)
+        public void Start()
         {
-            Bus.Publish<IThinkSomethingHappened>(x => x.What = DateTime.UtcNow.ToLongDateString());    
+            Thread.Sleep(500);
+            Bus.Send(new DoSomething());
+//            Bus.Send(new Foo());
+        }
+
+        public void Stop()
+        {
+            
+        }
+    }
+
+    public class What : IHandleMessages<IThinkSomethingHappened>
+    {
+        public void Handle(IThinkSomethingHappened message)
+        {
+            Console.WriteLine("Huzzaaaahhhhh: " + message.What);
         }
     }
 }

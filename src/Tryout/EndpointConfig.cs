@@ -2,6 +2,7 @@
 using System;
 using NServiceBus.Persistence;
 using Tryout.Server.Messages.Commands;
+using Tryout.Server.Messages.Events;
 
 namespace Tryout
 {
@@ -35,13 +36,26 @@ namespace Tryout
 
         public void Start()
         {
-            Bus.Send(new Foo());
-            Bus.Send(new Foo());
+            while (true)
+            {
+                var read = Console.ReadLine();
+                if (read == null || read == "q") break;
+             
+                Bus.Send(new DoSomething());
+            }
         }
 
         public void Stop()
         {
             
+        }
+    }
+
+    public class What : IHandleMessages<IThinkSomethingHappened>
+    {
+        public void Handle(IThinkSomethingHappened message)
+        {
+            Console.WriteLine("Huzzaaaahhhhh: " + message.What);
         }
     }
 }

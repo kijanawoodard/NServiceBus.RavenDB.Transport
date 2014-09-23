@@ -57,6 +57,10 @@
       <Project>{828F5D64-8CFD-4F20-8B9A-7F25ABB5122E}</Project>
       <Name>NServiceBus.RavenDB.Transport</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Tryout.Server.Messages\Tryout.Server.Messages.csproj">
+      <Project>{E22B4895-DCDA-4BC5-8E40-AD9854F7A168}</Project>
+      <Name>Tryout.Server.Messages</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
