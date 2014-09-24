@@ -57,6 +57,9 @@
     <Compile Include="RavenDBMessageSender.cs" />
     <Compile Include="RavenDBQueueCreator.cs" />
     <Compile Include="RavenDBTransport.cs" />
+    <Compile Include="RavenFactory.cs" />
+    <Compile Include="RavenRemoteQueueTransporter.cs" />
+    <Compile Include="RavenTransportMessage.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

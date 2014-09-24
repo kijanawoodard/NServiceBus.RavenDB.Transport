@@ -1,3 +1,4 @@
+using NServiceBus.Features;
 using Raven.Client;
 using Raven.Client.Extensions;
 
@@ -5,12 +6,18 @@ namespace NServiceBus.Transports.RavenDB
 {
     class RavenDBQueueCreator : ICreateQueues
     {
-        public IDocumentStore DocumentStore { get; set; }
+        public RavenFactory RavenFactory { get; set; }
+        public string EndpointName { get; set; }
+
         public void CreateQueueIfNecessary(Address address, string account)
         {
-            DocumentStore.DatabaseCommands.GlobalAdmin.EnsureDatabaseExists(address.Queue);
-            //todo: signal to console that we are creating db
-            //question: should everything under the root be a collection instead of a db...prob need Address refactor
+            if (address.Queue.StartsWith(EndpointName) && address.Queue != EndpointName) return; //combine all queues for an endpoint in one db
+
+            RavenFactory
+                .FindDocumentStore(address.Queue)
+                .DatabaseCommands.GlobalAdmin
+                .EnsureDatabaseExists(address.Queue);
+            //todo: log that we are creating db
         }
     }
 }

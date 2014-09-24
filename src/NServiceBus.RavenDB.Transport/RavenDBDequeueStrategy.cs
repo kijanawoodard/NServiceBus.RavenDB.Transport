@@ -1,6 +1,8 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using NServiceBus.Features;
 using Raven.Client;
 
 namespace NServiceBus.Transports.RavenDB
@@ -16,14 +18,14 @@ namespace NServiceBus.Transports.RavenDB
         private CancellationTokenSource _tokenSource;
         private Address _address;
 
-        public string ConnectionString { get; set; }
-        public IDocumentStore DocumentStore { get; set; }
+        public RavenFactory RavenFactory { get; set; }
 
         public void Init(Address address, 
             TransactionSettings transactionSettings, 
             Func<TransportMessage, bool> tryProcessMessage, 
             Action<TransportMessage, Exception> endProcessMessage)
         {
+            //todo: handle all local queues through one loop?
             _address = address;
             _endProcessMessage = endProcessMessage;
             _tryProcessMessage = tryProcessMessage;
@@ -68,18 +70,26 @@ namespace NServiceBus.Transports.RavenDB
             var cancellationToken = (CancellationToken)o;
             while (!cancellationToken.IsCancellationRequested)
             {
+                IEnumerable<RavenTransportMessage> messages;
+
                 //todo: introduce leadership for competing consumer
-                using (var session = DocumentStore.OpenSession(_address.Queue))
+                using (var session = RavenFactory.OpenSession())
                 {
-                    var messages =
+                    messages =
                         session.Query<RavenTransportMessage>()
-                            .OrderByDescending(x => x.When)
+                            .Where(x => x.Destination == _address.Queue)
+                            .OrderBy(x => x.SequenceNumber)
                             .Take(10) //todo: concurrency
                             .ToList();
+                }
 
-                    foreach (var message in messages)
+                foreach (var message in messages)
+                {
+                    using (var session = RavenFactory.OpenSession())
                     {
                         Exception exception = null;
+                        session.Store(message); //attach message to session
+
                         var transportMessage = new TransportMessage(message.Id, message.Headers);
                         transportMessage.Body = message.Body;
                         transportMessage.MessageIntent = message.MessageIntent;
@@ -98,7 +108,7 @@ namespace NServiceBus.Transports.RavenDB
                     }
                 }
 
-                Thread.Sleep(50); //bleh; tmeporary
+                Thread.Sleep(50); //bleh; temporary
             }
         }
 

@@ -1,7 +1,4 @@
-﻿using Raven.Client;
-using Raven.Client.Document;
-
-namespace NServiceBus.Features
+﻿namespace NServiceBus.Features
 {
     using System;
     using System.Linq;
@@ -35,22 +32,21 @@ namespace NServiceBus.Features
                     .Where(x => x.Name.StartsWith("NServiceBus/Transport/"))
                     .ToDictionary(x => x.Name.Replace("NServiceBus/Transport/", String.Empty), y => y.ConnectionString);
 
-            var store = new DocumentStore();
-            store.ParseConnectionString(connectionString);
-            store.Initialize();
+            var factory = new RavenFactory(connectionString, collection, context.Settings.EndpointName());
+            var transporter = new RavenRemoteQueueTransporter(factory, context.Settings.EndpointName());
+            transporter.Start();
+            //TODO: call Stop
 
             var container = context.Container;
             container.ConfigureComponent<RavenDBQueueCreator>(DependencyLifecycle.InstancePerCall)
-                .ConfigureProperty(p => p.DocumentStore, store);
+                .ConfigureProperty(p => p.RavenFactory, factory)
+                .ConfigureProperty(p => p.EndpointName, context.Settings.EndpointName());
 
             container.ConfigureComponent<RavenDBMessageSender>(DependencyLifecycle.InstancePerCall)
-                .ConfigureProperty(p => p.DefaultConnectionString, connectionString)
-                .ConfigureProperty(p => p.ConnectionStringCollection, collection)
-                .ConfigureProperty(p => p.DocumentStore, store);
+                .ConfigureProperty(p => p.RavenFactory, factory);
 
             container.ConfigureComponent<RavenDBDequeueStrategy>(DependencyLifecycle.InstancePerCall)
-                .ConfigureProperty(p => p.ConnectionString, connectionString)
-                .ConfigureProperty(p => p.DocumentStore, store);
+                .ConfigureProperty(p => p.RavenFactory, factory);
 
             //context.Container.ConfigureComponent(b => new SqlServerStorageContext(b.Build<PipelineExecutor>(), connectionString), DependencyLifecycle.InstancePerUnitOfWork);
         }
