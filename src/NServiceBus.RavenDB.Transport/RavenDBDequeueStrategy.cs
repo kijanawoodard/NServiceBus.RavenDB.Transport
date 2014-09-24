@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Transactions;
 using NServiceBus.Features;
 using Raven.Client;
 
@@ -85,14 +86,17 @@ namespace NServiceBus.Transports.RavenDB
 
                 foreach (var message in messages)
                 {
-                    using (var session = RavenFactory.OpenSession())
+                    var transportMessage = new TransportMessage(message.Id, message.Headers);
+                    transportMessage.Body = message.Body;
+                    transportMessage.MessageIntent = message.MessageIntent;
+
+                    //using (var ts = new TransactionScope(TransactionScopeOption.Suppress)) //FAILED experiment - there's an unexpected transacion happening in _tryProcessMessage
+                    using (var session = RavenFactory.StartSession(transportMessage.Id))
+                    //using (var session = RavenFactory.OpenSession())
                     {
                         Exception exception = null;
                         session.Store(message); //attach message to session
 
-                        var transportMessage = new TransportMessage(message.Id, message.Headers);
-                        transportMessage.Body = message.Body;
-                        transportMessage.MessageIntent = message.MessageIntent;
                         try
                         {
                             _tryProcessMessage(transportMessage);
@@ -104,7 +108,17 @@ namespace NServiceBus.Transports.RavenDB
                         }
 
                         _endProcessMessage(transportMessage, exception);
-                        session.SaveChanges();
+                        RavenFactory.DisposeSession(transportMessage.Id);
+
+                        try
+                        {
+                            session.SaveChanges();
+                        }
+                        catch (Exception e)
+                        {
+                            exception = e;
+                        }
+                        //ts.Complete();
                     }
                 }
 

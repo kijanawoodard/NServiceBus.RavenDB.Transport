@@ -16,27 +16,22 @@ namespace NServiceBus.Transports.RavenDB
         public void Send(TransportMessage message, SendOptions sendOptions)
         {
             Interlocked.Increment(ref _messageCount);
-            var transportMessage = new RavenTransportMessage(message, sendOptions, _messageCount);
+            var ravenTransportMessage = new RavenTransportMessage(message, sendOptions, _messageCount);
             
             //push all outbound messages to the endpoint db
-            
+            RavenFactory.UsingSession(message.CorrelationId, session => session.Store(ravenTransportMessage));
+
 
             //TODO: find a way to reliably attach to the same session from Dequeue
-//            RavenFactory.UsingSession(message.Id, session =>
-//            {
-//                session.Store(transportMessage);
-//                session.SaveChanges();
-//            });
-
-
-            using (var ts1 = new TransactionScope(TransactionScopeOption.Suppress))
-            using (var session = RavenFactory.OpenSession())
+            //there's an unexpected transacion happening in _tryProcessMessage
+            //using (var ts = new TransactionScope(TransactionScopeOption.Suppress))
+            /*using (var session = RavenFactory.OpenSession())
             {
                 session.Store(transportMessage);
                 session.SaveChanges();
             
-                ts1.Complete();
-            }
+          //      ts.Complete();
+            }*/
         }
     }
 }

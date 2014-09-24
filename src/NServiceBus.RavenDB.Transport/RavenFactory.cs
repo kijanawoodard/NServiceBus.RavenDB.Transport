@@ -28,6 +28,7 @@ namespace NServiceBus.Features
             {
                 var store = new DocumentStore();
                 store.ParseConnectionString(connectionString);
+                store.EnlistInDistributedTransactions = false;
                 store.Initialize();
 
                 _stores[connectionString] = store;    
@@ -48,18 +49,17 @@ namespace NServiceBus.Features
             return _stores[_defaultConnectionString].OpenSession(_endpointName);
         }
 
-        /*public IDocumentSession OpenSession(string messageId)
+        public IDocumentSession StartSession(string messageId)
         {
-            IDocumentSession session;
-            var found = _sessions.TryGetValue(messageId, out session);
-
-            if (!found || session == null)
-            {
-                session = _stores[_defaultConnectionString].OpenSession(_endpointName);
-                _sessions[messageId] = session;
-            }
+            var session = _stores[_defaultConnectionString].OpenSession(_endpointName);
+            _sessions[messageId] = session;
 
             return session;
+        }
+
+        public void DisposeSession(string messageId) //it would be nice if c# had composition so I could just modify Dispose without have to fully adapt :-(
+        {
+            _sessions.Remove(messageId);
         }
 
         public void UsingSession(string messageId, Action<IDocumentSession> action)
@@ -76,8 +76,9 @@ namespace NServiceBus.Features
             using (session = _stores[_defaultConnectionString].OpenSession(_endpointName))
             {
                 action(session);
+                session.SaveChanges();
             }
-        }*/
+        }
 
         public IDocumentSession OpenRemoteSession(string queue)
         {

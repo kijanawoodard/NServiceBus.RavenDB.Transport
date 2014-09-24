@@ -15,6 +15,7 @@ namespace NServiceBus.Transports.RavenDB
         });
 
         public string Id { get; set; }
+        public string TransportMessageId { get; set; }
         public string CorrelationId { get; set; }
         public Address ReplyToAddress { get; set; }
         public bool Recoverable { get; set; }
@@ -34,6 +35,7 @@ namespace NServiceBus.Transports.RavenDB
         public RavenTransportMessage(TransportMessage message, SendOptions sendOptions, long sequenceNumber)
         {
             Id = string.Format("RavenTransportMessages/{0}/{1}", sendOptions.Destination.Queue, message.Id);
+            TransportMessageId = message.Id;
             CorrelationId = message.CorrelationId;
             MessageIntent = message.MessageIntent;
             Recoverable = message.Recoverable;
