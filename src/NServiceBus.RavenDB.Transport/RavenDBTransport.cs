@@ -46,7 +46,8 @@
                 .ConfigureProperty(p => p.RavenFactory, factory);
 
             container.ConfigureComponent<RavenDBDequeueStrategy>(DependencyLifecycle.InstancePerCall)
-                .ConfigureProperty(p => p.RavenFactory, factory);
+                .ConfigureProperty(p => p.RavenFactory, factory)
+                .ConfigureProperty(p => p.EndpointName, context.Settings.EndpointName());
 
             //context.Container.ConfigureComponent(b => new SqlServerStorageContext(b.Build<PipelineExecutor>(), connectionString), DependencyLifecycle.InstancePerUnitOfWork);
         }

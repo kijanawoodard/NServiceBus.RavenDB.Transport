@@ -37,6 +37,7 @@ namespace NServiceBus.Transports.RavenDB
             Id = string.Format("RavenTransportMessages/{0}/{1}", sendOptions.Destination.Queue, message.Id);
             TransportMessageId = message.Id;
             CorrelationId = message.CorrelationId;
+            ReplyToAddress = sendOptions.ReplyToAddress;
             MessageIntent = message.MessageIntent;
             Recoverable = message.Recoverable;
             TimeToBeReceived = message.TimeToBeReceived;

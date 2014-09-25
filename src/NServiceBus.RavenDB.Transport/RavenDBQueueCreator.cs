@@ -1,5 +1,4 @@
 using NServiceBus.Features;
-using Raven.Client;
 using Raven.Client.Extensions;
 
 namespace NServiceBus.Transports.RavenDB
