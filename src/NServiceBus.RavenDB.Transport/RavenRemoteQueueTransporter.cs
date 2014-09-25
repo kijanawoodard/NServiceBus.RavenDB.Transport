@@ -21,7 +21,6 @@ namespace NServiceBus.Transports.RavenDB
 
         public void Start()
         {
-            //todo: handle concurrency - prob not threads, just a buffer/queue to keep work supplied
             _tokenSource = new CancellationTokenSource();
             StartWorker();
         }
@@ -59,6 +58,7 @@ namespace NServiceBus.Transports.RavenDB
                 try
                 {
                     Work();
+                    Thread.Sleep(150); //bleh; temporary
                 }
                 catch (Exception)
                 {
@@ -100,10 +100,7 @@ namespace NServiceBus.Transports.RavenDB
                     //TODO: if a destination is down, skip it "for a while"
                     Thread.Sleep(5000);
                 }
-
             }
-
-            Thread.Sleep(150); //bleh; temporary
         }
 
         void SendMessages(string queue, IEnumerable<RavenTransportMessage> messages)
