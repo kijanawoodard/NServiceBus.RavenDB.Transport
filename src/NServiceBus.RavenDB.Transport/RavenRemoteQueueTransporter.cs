@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NServiceBus.Features;
+using Raven.Client.Linq;
 
 namespace NServiceBus.Transports.RavenDB
 {
@@ -61,7 +62,7 @@ namespace NServiceBus.Transports.RavenDB
                 try
                 {
                     Work();
-                    Thread.Sleep(150); //bleh; temporary
+                    Thread.Sleep(100); //bleh; temporary
                 }
                 catch (Exception)
                 {
@@ -70,9 +71,11 @@ namespace NServiceBus.Transports.RavenDB
             }
         }
 
+        private readonly IDictionary<string, long> slowDestinations = new Dictionary<string, long>();
         void Work()
         {
             IEnumerable<RavenTransportMessage> outboundMessages;
+            long tock;
 
             using (var session = _ravenFactory.OpenSession())
             {
@@ -81,13 +84,19 @@ namespace NServiceBus.Transports.RavenDB
                          && leadership.HasOutboundAssignment(_processIdentity);
 
                 if(!ok) return;
-                
+
+                tock = leadership.Tock;
+                var expired = slowDestinations.Where(x => x.Value < tock).Select(x => x.Key).ToList();
+                expired.ForEach(key => slowDestinations.Remove(key));
+                var skip = slowDestinations.Keys.ToList();
+
                 outboundMessages =
                     session.Query<RavenTransportMessage>()
                         .Where(x => x.Outbound)
                         .Where(x => x.Destination != _endpointName)
+                        .Where(x => !x.Destination.In(skip))
                         .OrderBy(x => x.SequenceNumber)
-                        .Take(10) //todo: concurrency
+                        .Take(1024)
                         .ToList();
             }
 
@@ -105,8 +114,7 @@ namespace NServiceBus.Transports.RavenDB
                 catch (Exception) //let each batch succeed or fail on its own
                 {
                     //log
-                    //TODO: if a destination is down, skip it "for a while"
-                    Thread.Sleep(5000);
+                    slowDestinations[batch.Key] = tock + 5;
                 }
             }
         }
