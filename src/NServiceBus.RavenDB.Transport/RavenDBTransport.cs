@@ -32,11 +32,13 @@
                     .Where(x => x.Name.StartsWith("NServiceBus/Transport/"))
                     .ToDictionary(x => x.Name.Replace("NServiceBus/Transport/", String.Empty), y => y.ConnectionString);
 
+            var identity = Guid.NewGuid().ToString();
             var factory = new RavenFactory(connectionString, collection, context.Settings.EndpointName());
-            var transporter = new RavenRemoteQueueTransporter(factory, context.Settings.EndpointName());
+            var transporter = new RavenRemoteQueueTransporter(factory, context.Settings.EndpointName(), identity);
             transporter.Start();
             //TODO: call Stop
 
+            
             var container = context.Container;
             container.ConfigureComponent<RavenDBQueueCreator>(DependencyLifecycle.InstancePerCall)
                 .ConfigureProperty(p => p.RavenFactory, factory)
@@ -47,7 +49,8 @@
 
             container.ConfigureComponent<RavenDBDequeueStrategy>(DependencyLifecycle.InstancePerCall)
                 .ConfigureProperty(p => p.RavenFactory, factory)
-                .ConfigureProperty(p => p.EndpointName, context.Settings.EndpointName());
+                .ConfigureProperty(p => p.EndpointName, context.Settings.EndpointName())
+                .ConfigureProperty(p => p.ProcessIdentity, identity);
 
             //context.Container.ConfigureComponent(b => new SqlServerStorageContext(b.Build<PipelineExecutor>(), connectionString), DependencyLifecycle.InstancePerUnitOfWork);
         }

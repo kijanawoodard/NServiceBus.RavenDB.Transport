@@ -11,17 +11,20 @@ namespace NServiceBus.Transports.RavenDB
     {
         private readonly RavenFactory _ravenFactory;
         private readonly string _endpointName;
-        private CancellationTokenSource _tokenSource;
+        private readonly string _processIdentity;
+        private readonly CancellationTokenSource _tokenSource;
 
-        public RavenRemoteQueueTransporter(RavenFactory ravenFactory, string endpointName)
+        
+        public RavenRemoteQueueTransporter(RavenFactory ravenFactory, string endpointName, string processIdentity)
         {
             _ravenFactory = ravenFactory;
             _endpointName = endpointName;
+            _processIdentity = processIdentity;
+            _tokenSource = new CancellationTokenSource();
         }
 
         public void Start()
         {
-            _tokenSource = new CancellationTokenSource();
             StartWorker();
         }
 
@@ -71,9 +74,14 @@ namespace NServiceBus.Transports.RavenDB
         {
             IEnumerable<RavenTransportMessage> outboundMessages;
 
-            //todo: introduce leadership for competing consumer
             using (var session = _ravenFactory.OpenSession())
             {
+                var leadership = session.Load<Leadership>(Leadership.Identifier);
+                var ok = leadership.Status == Leadership.ClusterStatus.Harmony
+                         && leadership.HasOutboundAssignment(_processIdentity);
+
+                if(!ok) return;
+                
                 outboundMessages =
                     session.Query<RavenTransportMessage>()
                         .Where(x => x.Outbound)

@@ -51,6 +51,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Consensus\Leadership.cs" />
+    <Compile Include="Consensus\Followership.cs" />
     <Compile Include="RavenDB.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RavenDBDequeueStrategy.cs" />

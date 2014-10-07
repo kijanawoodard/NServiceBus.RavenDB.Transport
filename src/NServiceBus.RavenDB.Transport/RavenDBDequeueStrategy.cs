@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NServiceBus.Features;
 using NServiceBus.Logging;
+using Raven.Abstractions.Exceptions;
 
 namespace NServiceBus.Transports.RavenDB
 {
@@ -15,20 +16,18 @@ namespace NServiceBus.Transports.RavenDB
     {
         static readonly ILog Logger = LogManager.GetLogger(typeof(RavenDBDequeueStrategy));
 
-        private string _processIdentity; 
-        
         private Func<TransportMessage, bool> _tryProcessMessage;
         private Action<TransportMessage, Exception> _endProcessMessage;
         private CancellationTokenSource _tokenSource;
         private Address _address;
 
-        private const int ConsensusHeartbeat = 125;
-        private const int ConsensusTimeout = ConsensusHeartbeat*50; //TODO: config?
+        private const int ConsensusHeartbeat = 100;
         private const int MaxMessagesToRead = 256;
         private readonly BlockingCollection<RavenTransportMessage> _workQueue; 
 
         public RavenFactory RavenFactory { get; set; }
         public string EndpointName { get; set; }
+        public string ProcessIdentity { get; set; }
 
         public RavenDBDequeueStrategy()
         {
@@ -44,8 +43,6 @@ namespace NServiceBus.Transports.RavenDB
             _address = address;
             _endProcessMessage = endProcessMessage;
             _tryProcessMessage = tryProcessMessage;
-
-            _processIdentity = Guid.NewGuid().ToString();
         }
 
         public void Start(int maximumConcurrencyLevel)
@@ -106,7 +103,15 @@ namespace NServiceBus.Transports.RavenDB
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-               Lead();
+                try
+                {
+                    Lead();
+                }
+                catch (ConcurrencyException)
+                {
+                    //Failed bid for power
+                }
+
                 var sleep = ThreadLocalRandom.Next(ConsensusHeartbeat, ConsensusHeartbeat*2); //add jitter to reduce conflicts
                 Thread.Sleep(sleep); 
             }
@@ -127,9 +132,15 @@ namespace NServiceBus.Transports.RavenDB
             {
                 var message = _workQueue.Take(cancellationToken);
                 InProgress.TryAdd(message.Id, 0);
-                Work(message);
-                byte trash;
-                InProgress.TryRemove(message.Id, out trash);
+                try
+                {
+                    Work(message);
+                }
+                finally
+                {
+                    byte trash;
+                    InProgress.TryRemove(message.Id, out trash);   
+                }
             }
         }
 
@@ -156,88 +167,40 @@ namespace NServiceBus.Transports.RavenDB
 
         void Lead()
         {
-            /*
-             * Claim leadership if leader hasn't updated within heartbeat
-             *  Read follower documents Load Starting With
-             *      Upadate term, plus heart beat
-             *      Set Ranges to work on claim tickets number
-             *      Set status to Waiting
-             * Wait for all Followers to acknowledge new term
-             *      Set status to Running
-             *  
-             * If Follower is slow or missing remove from list
-             *      Start new term
-             * If New Follower found
-             *      Start new term
-             */
             using (var session = RavenFactory.OpenSession())
             {
                 session.Advanced.UseOptimisticConcurrency = true;
 
                 var l = session.Advanced.Lazily.Load<Leadership>(Leadership.Identifier);
-                var f = session.Advanced.Lazily.LoadStartingWith<Follower>(Follower.IdPrefix);
+                var f = session.Advanced.Lazily.LoadStartingWith<Followership>(Followership.IdPrefix);
                 session.Advanced.Eagerly.ExecuteAllPendingLazyOperations();
 
                 var leadership = l.Value;
-                var followers = f.Value
-                                    .Where(follower => (DateTime.UtcNow - follower.LastUpdate).TotalMilliseconds < ConsensusTimeout) //filter out slow followers
-                                    .ToList();
+                
+                var followers = f.Value.ToList();
+                var me = followers.FirstOrDefault(x => x.FollowerId == ProcessIdentity);
+                if (me == null) return;
 
-                if (leadership == null)
+                if (me.ConsideringCoup)
                 {
-                    leadership = new Leadership();
-                    session.Store(leadership);
-                }
+                    if (leadership == null)
+                    {
+                        leadership = new Leadership();
+                        session.Store(leadership);
+                    }
 
-                if ((DateTime.UtcNow - leadership.LastUpdate).TotalMilliseconds > ConsensusTimeout)
-                {
-                    leadership.Leader = _processIdentity; //claim leadership
-                    leadership.Assignments.Clear();
-                    leadership.Status = Leadership.ClusterStatus.WaitingForNextTerm;
+                    leadership.UsurpPower(ProcessIdentity);
                     session.SaveChanges(); //throw if someone else beats me
                     //TODO: Log Won Election!
                 }
 
-                var iAmLeader = leadership.Leader == _processIdentity;
-                if (!iAmLeader) return;
+                if (leadership.IsHumbleFollower(ProcessIdentity)) return;
 
-                leadership.LastUpdate = DateTime.UtcNow; //heartbeat
+                leadership.CommandFollowers(followers);
 
-                var differences = new HashSet<string>(followers.Select(x => x.FollowerId));
-                differences.SymmetricExceptWith(leadership.Assignments.Select(x => x.FollowerId));
+                var dead = followers.Where(leadership.IsDeadFollower).ToList();
+                dead.ForEach(session.Delete);
 
-                if (differences.Any() && followers.Any())
-                {
-                    leadership.Term++;
-                    leadership.Status = Leadership.ClusterStatus.WaitingForNextTerm;
-
-                    var range = byte.MaxValue/followers.Count; //match to TransportMessage ClaimTicket
-                    var remainder = byte.MaxValue - (range*followers.Count);
-
-                    leadership.Assignments =
-                        followers
-                            .Select((follower, i) => new Leadership.FollowerAssignment
-                            {
-                                FollowerId = follower.FollowerId,
-                                LowerBound = i * range,
-                                UpperBound = (i * range) + range + (i == followers.Count - 1 ? remainder : 0)
-                            })
-                            .ToList();
-                }
-
-                var followersInLine = followers.All(x => x.Term == leadership.Term);
-                if (followersInLine && followers.Any())
-                {
-                    leadership.Status = Leadership.ClusterStatus.Running;
-                }
-
-                session.SaveChanges();
-
-                //purge really old followers
-                var old = f.Value
-                            .Where(follower => (DateTime.UtcNow - follower.LastUpdate).TotalMilliseconds > ConsensusTimeout*5)
-                            .ToList();
-                old.ForEach(session.Delete);
                 session.SaveChanges();
             }
         }
@@ -246,46 +209,44 @@ namespace NServiceBus.Transports.RavenDB
         public static ConcurrentDictionary<string, byte> InProgress = new ConcurrentDictionary<string, byte>();
         void Follow()
         {
-            /*
-             * Read Follower document
-             *      Update heartbeat
-             * Look at leadership document
-             *  If it says Waiting, stop taking work and empty queue
-             *      Update Term
-             *  If not in the list, stop taking work and empty queue
-             *      A new term should start soon with you
-             * 
-             */
-
             using (var session = RavenFactory.OpenSession())
             {
                 var l = session.Advanced.Lazily.Load<Leadership>(Leadership.Identifier);
-                var f = session.Advanced.Lazily.Load<Follower>(Follower.FormatId(_processIdentity));
+                var m = session.Advanced.Lazily.Load<Followership>(Followership.FormatId(ProcessIdentity));
                 session.Advanced.Eagerly.ExecuteAllPendingLazyOperations();
                 
                 var leadership = l.Value ?? new Leadership();
-                var me = f.Value;
+                var me = m.Value;
 
                 if (me == null)
                 {
-                    me = new Follower(_processIdentity);
+                    me = new Followership(ProcessIdentity);
                     session.Store(me);
                 }
 
-                me.LastUpdate = DateTime.UtcNow;
-                if (me.Term != leadership.Term && InProgress.Count == 0)
+                if (leadership.Status == Leadership.ClusterStatus.Turmoil 
+                    || leadership.DeniedAssignment(ProcessIdentity))
                 {
-                    me.Term = leadership.Term;
+                    while (_workQueue.Count > 0)
+                    {
+                        RavenTransportMessage trash;
+                        _workQueue.TryTake(out trash); //clear the queue
+                    }
+
+                    Thread.Sleep(10); //make sure workers have enough time to get their work in the InProgress collection 
+
+                    me.LastSequenceNumber = 0;
+                    RecentMessages.Clear();
                 }
 
-                var assignment = leadership.Assignments.FirstOrDefault(x => x.FollowerId == _processIdentity);
-                var ok = leadership.Status == Leadership.ClusterStatus.Running
-                           && assignment != null;
 
-                if (ok)
+                if (leadership.Status == Leadership.ClusterStatus.Harmony
+                    && leadership.HasAssignment(ProcessIdentity))
                 {
+                    var assignment = leadership.GetAssignment(ProcessIdentity);
+                
                     var take = MaxMessagesToRead - _workQueue.Count;
-                    //todo: track where we are so we don't keep querying the same ones
+                    
                     var messages =
                         session.Query<RavenTransportMessage>()
                             .Where(x => x.Destination == _address.Queue)
@@ -302,19 +263,8 @@ namespace NServiceBus.Transports.RavenDB
                     if (messages.Any())
                         me.LastSequenceNumber = messages.Last().SequenceNumber;
                 }
-                else
-                {
-                    while (_workQueue.Count > 0)
-                    {
-                        RavenTransportMessage trash;
-                        _workQueue.TryTake(out trash); //clear the queue
-                    }
-                    Thread.Sleep(ConsensusHeartbeat); //make sure workers have enough time to get their work in the InProgress collection //TODO: mechanism to know when all workers are done; might need to make term acceptance conditional on this.
-                        
-                    me.LastSequenceNumber = 0;
-                    RecentMessages.Clear();
-                }
-                
+
+                me.MakeReportForLeader(leadership, InProgress.Select(x => x.Key).ToList());
                 session.SaveChanges();
             }
         }
@@ -353,54 +303,6 @@ namespace NServiceBus.Transports.RavenDB
         }
     }
 
-    public class Leadership
-    {
-        public static string Identifier = "NServiceBus/Transport/Leadership";
-        public string Id { get { return Identifier; } }
-        public string Leader { get; set; }
-        public int Term { get; set; }
-        public DateTime LastUpdate { get; set; }
-        public List<FollowerAssignment> Assignments { get; set; }
-        public ClusterStatus Status { get; set; }
-
-        public enum ClusterStatus
-        {
-            WaitingForNextTerm,
-            Running
-        }
-
-        public class FollowerAssignment
-        {
-            public string FollowerId { get; set; }
-            public int LowerBound { get; set; }
-            public int UpperBound { get; set; }
-        }
-
-        public Leadership()
-        {
-            Assignments = new List<FollowerAssignment>();
-        }
-    }
-
-    public class Follower
-    {
-        public static string IdPrefix = "NServiceBus/Transport/Follower/";
-        public static string FormatId(string followerId)
-        {
-            return IdPrefix + followerId;
-        }
-
-        public string Id { get { return FormatId(FollowerId); } }
-        public string FollowerId { get; private set; }
-        public int Term { get; set; }
-        public DateTime LastUpdate { get; set; }
-        public long LastSequenceNumber { get; set; }
-
-        public Follower(string followerId)
-        {
-            FollowerId = followerId;
-        }
-    }
     /// <summary> 
     /// source: http://codeblog.jonskeet.uk/2009/11/04/revisiting-randomness/
     /// Convenience class for dealing with randomness. 
