@@ -71,7 +71,7 @@ namespace NServiceBus.Transports.RavenDB
             }
         }
 
-        private readonly IDictionary<string, long> slowDestinations = new Dictionary<string, long>();
+        private readonly IDictionary<string, long> _slowDestinations = new Dictionary<string, long>();
         void Work()
         {
             IEnumerable<RavenTransportMessage> outboundMessages;
@@ -86,9 +86,9 @@ namespace NServiceBus.Transports.RavenDB
                 if(!ok) return;
 
                 tock = leadership.Tock;
-                var expired = slowDestinations.Where(x => x.Value < tock).Select(x => x.Key).ToList();
-                expired.ForEach(key => slowDestinations.Remove(key));
-                var skip = slowDestinations.Keys.ToList();
+                var expired = _slowDestinations.Where(x => x.Value < tock).Select(x => x.Key).ToList();
+                expired.ForEach(key => _slowDestinations.Remove(key));
+                var skip = _slowDestinations.Keys.ToList();
 
                 outboundMessages =
                     session.Query<RavenTransportMessage>()
@@ -114,7 +114,7 @@ namespace NServiceBus.Transports.RavenDB
                 catch (Exception) //let each batch succeed or fail on its own
                 {
                     //log
-                    slowDestinations[batch.Key] = tock + 5;
+                    _slowDestinations[batch.Key] = tock + 5;
                 }
             }
         }
