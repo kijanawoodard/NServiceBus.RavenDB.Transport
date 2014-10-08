@@ -62,7 +62,7 @@ namespace NServiceBus.Transports.RavenDB
                 try
                 {
                     Work();
-                    Thread.Sleep(100); //bleh; temporary
+                    Thread.Sleep(500); //bleh; temporary
                 }
                 catch (Exception)
                 {

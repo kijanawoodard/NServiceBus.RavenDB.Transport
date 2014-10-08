@@ -21,7 +21,7 @@ namespace NServiceBus.Transports.RavenDB
         private CancellationTokenSource _tokenSource;
         private Address _address;
 
-        private const int ConsensusHeartbeat = 100;
+        private const int ConsensusHeartbeat = 25;
         private const int MaxMessagesToRead = 256;
         private readonly BlockingCollection<RavenTransportMessage> _workQueue; 
 
@@ -292,10 +292,12 @@ namespace NServiceBus.Transports.RavenDB
                 {
                     exception = e;
                 }
+                finally
+                {
+                    RavenFactory.EndSession(transportMessage.Id);    
+                }
 
                 _endProcessMessage(transportMessage, exception);
-                RavenFactory.DisposeSession(transportMessage.Id);
-
                 session.SaveChanges();
             }
         }

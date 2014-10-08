@@ -57,7 +57,7 @@ namespace NServiceBus.Features
             return session;
         }
 
-        public void DisposeSession(string messageId) //it would be nice if c# had composition so I could just modify Dispose without have to fully adapt :-(
+        public void EndSession(string messageId) //it would be nice if c# had composition so I could just modify Dispose without have to fully adapt :-(
         {
             _sessions.Remove(messageId);
         }
