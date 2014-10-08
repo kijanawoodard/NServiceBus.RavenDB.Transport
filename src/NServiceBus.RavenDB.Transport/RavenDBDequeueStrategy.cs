@@ -103,6 +103,8 @@ namespace NServiceBus.Transports.RavenDB
         {
             while (!cancellationToken.IsCancellationRequested)
             {
+                var sleep = ThreadLocalRandom.Next(ConsensusHeartbeat, ConsensusHeartbeat * 2); //add jitter to reduce conflicts
+                Thread.Sleep(sleep); 
                 try
                 {
                     Lead();
@@ -111,9 +113,6 @@ namespace NServiceBus.Transports.RavenDB
                 {
                     //Failed bid for power
                 }
-
-                var sleep = ThreadLocalRandom.Next(ConsensusHeartbeat, ConsensusHeartbeat*2); //add jitter to reduce conflicts
-                Thread.Sleep(sleep); 
             }
         }
 
@@ -121,8 +120,8 @@ namespace NServiceBus.Transports.RavenDB
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-               Follow();
-               Thread.Sleep(ConsensusHeartbeat); 
+                Thread.Sleep(ConsensusHeartbeat); 
+                Follow();
             }
         }
 
@@ -189,11 +188,15 @@ namespace NServiceBus.Transports.RavenDB
                         session.Store(leadership);
                     }
 
-                    leadership.UsurpPower(ProcessIdentity);
-                    session.SaveChanges(); //throw if someone else beats me
-                    //TODO: Log Won Election!
+                    if (leadership.IsHumbleFollower(ProcessIdentity))
+                    {
+                        leadership.UsurpPower(ProcessIdentity);
+                        session.SaveChanges(); //throw if someone else beats me
+                        //TODO: Log Won Election!
+                    }
                 }
 
+                if (leadership == null) return;
                 if (leadership.IsHumbleFollower(ProcessIdentity)) return;
 
                 leadership.CommandFollowers(followers);
@@ -250,7 +253,7 @@ namespace NServiceBus.Transports.RavenDB
                     var messages =
                         session.Query<RavenTransportMessage>()
                             .Where(x => x.Destination == _address.Queue)
-                            .Where(x => x.ClaimTicket > assignment.LowerBound && x.ClaimTicket <= assignment.UpperBound) //todo: tests
+                            .Where(x => x.ClaimTicket >= assignment.LowerBound && x.ClaimTicket <= assignment.UpperBound) //todo: tests
                             .Where(x => x.SequenceNumber >= me.LastSequenceNumber)
                             .OrderBy(x => x.SequenceNumber)
                             .Take(take) 

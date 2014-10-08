@@ -36,7 +36,7 @@ namespace NServiceBus.Transports.RavenDB
         {
             InboundAssignments = new List<FollowerAssignment>();
             FollowershipLeeway = 5;
-            FollowershipInsolence = 50;
+            FollowershipInsolence = 10;
         }
 
         public void UsurpPower(string candidate)
@@ -82,7 +82,8 @@ namespace NServiceBus.Transports.RavenDB
 
         public bool IsDeadFollower(Followership follower)
         {
-            return Tock > follower.Tock + FollowershipInsolence;
+            return (Term == follower.Term && Tock > follower.Tock + FollowershipInsolence)
+                || (Term > follower.Term && Tock > FollowershipInsolence);
         }
 
         public void CommandFollowers(List<Followership> followers)
@@ -104,17 +105,17 @@ namespace NServiceBus.Transports.RavenDB
 
             if (!followers.Any()) return;
 
-            var range = byte.MaxValue / followers.Count; //match MaxValue to TransportMessage ClaimTicket
-            var remainder = byte.MaxValue - (range * followers.Count);
-
             if (differences.Any())
             {
+                var range = byte.MaxValue / followers.Count; //match MaxValue to TransportMessage ClaimTicket
+                var remainder = byte.MaxValue - (range * followers.Count);
+
                 InboundAssignments =
                 followers
                     .Select((follower, i) => new FollowerAssignment
                     {
                         FollowerId = follower.FollowerId,
-                        LowerBound = i * range,
+                        LowerBound = i * range + (i == 0 ? 0 : 1),
                         UpperBound = (i * range) + range + (i == followers.Count - 1 ? remainder : 0)
                     })
                     .ToList();

@@ -1,4 +1,7 @@
-﻿namespace NServiceBus.Features
+﻿using System.IO;
+using System.IO.IsolatedStorage;
+
+namespace NServiceBus.Features
 {
     using System;
     using System.Linq;
@@ -32,9 +35,10 @@
                     .Where(x => x.Name.StartsWith("NServiceBus/Transport/"))
                     .ToDictionary(x => x.Name.Replace("NServiceBus/Transport/", String.Empty), y => y.ConnectionString);
 
-            var identity = Guid.NewGuid().ToString();
-            var factory = new RavenFactory(connectionString, collection, context.Settings.EndpointName());
-            var transporter = new RavenRemoteQueueTransporter(factory, context.Settings.EndpointName(), identity);
+            var endpointName = context.Settings.EndpointName();
+            var identity = GetIdentity(endpointName);//Guid.NewGuid().ToString();
+            var factory = new RavenFactory(connectionString, collection, endpointName);
+            var transporter = new RavenRemoteQueueTransporter(factory, endpointName, identity);
             transporter.Start();
             //TODO: call Stop
 
@@ -42,17 +46,41 @@
             var container = context.Container;
             container.ConfigureComponent<RavenDBQueueCreator>(DependencyLifecycle.InstancePerCall)
                 .ConfigureProperty(p => p.RavenFactory, factory)
-                .ConfigureProperty(p => p.EndpointName, context.Settings.EndpointName());
+                .ConfigureProperty(p => p.EndpointName, endpointName);
 
             container.ConfigureComponent<RavenDBMessageSender>(DependencyLifecycle.InstancePerCall)
                 .ConfigureProperty(p => p.RavenFactory, factory);
 
             container.ConfigureComponent<RavenDBDequeueStrategy>(DependencyLifecycle.InstancePerCall)
                 .ConfigureProperty(p => p.RavenFactory, factory)
-                .ConfigureProperty(p => p.EndpointName, context.Settings.EndpointName())
+                .ConfigureProperty(p => p.EndpointName, endpointName)
                 .ConfigureProperty(p => p.ProcessIdentity, identity);
 
             //context.Container.ConfigureComponent(b => new SqlServerStorageContext(b.Build<PipelineExecutor>(), connectionString), DependencyLifecycle.InstancePerUnitOfWork);
+        }
+
+        private IsolatedStorageFileStream _stream;
+        private string GetIdentity(string endpointName)
+        {
+            var store = IsolatedStorageFile.GetMachineStoreForAssembly();
+
+            for (var i = 0; i < int.MaxValue; i++)
+            {
+                try
+                {
+                    var file = string.Format("NServiceBus.Transport.{0}.lock", i);
+                    _stream = store.OpenFile(file, FileMode.OpenOrCreate, FileAccess.Read, FileShare.None);
+                    var result = string.Format("{0}/{1}/{2}", Environment.MachineName, endpointName, i);
+                    return result;
+                }
+                catch (IOException)
+                {
+                    
+                    
+                }
+            }
+
+            return Guid.NewGuid().ToString();
         }
     }
 }

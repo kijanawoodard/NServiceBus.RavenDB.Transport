@@ -44,12 +44,15 @@ namespace NServiceBus.Transports.RavenDB
             {
                 if (currentWork.Any()) return;
                 Term = leader.Term;
+                Tock = leader.Tock; 
+                LeaderTock = leader.Tock;
             }
 
-            if (leader.Tock <= LeaderTock) return;
-            
-            Tock = leader.Tock;
-            LeaderTock = leader.Tock;
+            if (leader.Tock > LeaderTock)
+            {
+                Tock = leader.Tock;
+                LeaderTock = leader.Tock;
+            }
         }
 
         public bool ConsideringCoup { get { return Tock > LeaderTock + LeadershipLeeway; } }

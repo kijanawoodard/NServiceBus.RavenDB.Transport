@@ -79,7 +79,7 @@ namespace NServiceBus.Transports.RavenDB
 
             using (var session = _ravenFactory.OpenSession())
             {
-                var leadership = session.Load<Leadership>(Leadership.Identifier);
+                var leadership = session.Load<Leadership>(Leadership.Identifier) ?? new Leadership();
                 var ok = leadership.Status == Leadership.ClusterStatus.Harmony
                          && leadership.HasOutboundAssignment(_processIdentity);
 
