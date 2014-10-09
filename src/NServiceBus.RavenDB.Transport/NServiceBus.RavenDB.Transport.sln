@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.21005.1
+VisualStudioVersion = 12.0.30723.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NServiceBus.RavenDB.Transport", "NServiceBus.RavenDB.Transport.csproj", "{828F5D64-8CFD-4F20-8B9A-7F25ABB5122E}"
 EndProject
@@ -15,6 +15,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tryout.Server", "..\Tryout.Server\Tryout.Server.csproj", "{E739563D-9EAF-4565-80E4-B1CE1EBA7D9C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tryout.Server.Messages", "..\Tryout.Server.Messages\Tryout.Server.Messages.csproj", "{E22B4895-DCDA-4BC5-8E40-AD9854F7A168}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerformanceTest", "..\PerformanceTest\PerformanceTest.csproj", "{E889B211-A88E-43C8-ABCA-7DB60F502FAE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -38,6 +40,10 @@ Global
 		{E22B4895-DCDA-4BC5-8E40-AD9854F7A168}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E22B4895-DCDA-4BC5-8E40-AD9854F7A168}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E22B4895-DCDA-4BC5-8E40-AD9854F7A168}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E889B211-A88E-43C8-ABCA-7DB60F502FAE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E889B211-A88E-43C8-ABCA-7DB60F502FAE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E889B211-A88E-43C8-ABCA-7DB60F502FAE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E889B211-A88E-43C8-ABCA-7DB60F502FAE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

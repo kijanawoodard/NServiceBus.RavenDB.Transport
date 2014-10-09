@@ -6,7 +6,7 @@
 
     public class RavenDB : TransportDefinition
     {
-        internal RavenDB()
+        public RavenDB()
         {
             RequireOutboxConsent = false;
         }
