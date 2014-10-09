@@ -19,7 +19,7 @@ namespace Runner
     {
         static void Main(string[] args)
         {
-            args = new[] { "10", "1000", "json", "", "", "", "", "10", "" };
+            args = new[] { "10", "1000", "json", "", "volatile", "", "", "10", "" };
             var testCaseToRun = args[0];
 
             int numberOfThreads;
@@ -34,8 +34,8 @@ namespace Runner
                 return;
             }
 
-            var volatileMode = (args[4].ToLower() == "volatile");
-            var suppressDTC = (args[4].ToLower() == "suppressdtc");
+            var volatileMode = true;//(args[4].ToLower() == "volatile");
+            var suppressDTC = true;//(args[4].ToLower() == "suppressdtc");
             var twoPhaseCommit = (args[4].ToLower() == "twophasecommit");
             var saga = (args[5].ToLower() == "sagamessages");
             var encryption = (args[5].ToLower() == "encryption");
@@ -129,6 +129,7 @@ namespace Runner
 
                 DumpSetting(args);
                 Statistics.Dump();
+                Console.ReadLine();
             }
         }
 

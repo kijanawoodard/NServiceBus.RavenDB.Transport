@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Raven.Client;
@@ -21,7 +22,7 @@ namespace NServiceBus.Features
             _endpointName = endpointName;
 
             _stores = new Dictionary<string, IDocumentStore>();
-            _sessions = new Dictionary<string, IDocumentSession>();
+            _sessions = new ConcurrentDictionary<string, IDocumentSession>();
 
             var unique = new[] {defaultConnectionString}.Union(_extendedConnectectionStrings.Values);
             foreach (var connectionString in unique)

@@ -21,8 +21,8 @@ namespace NServiceBus.Transports.RavenDB
         private CancellationTokenSource _tokenSource;
         private Address _address;
 
-        private const int ConsensusHeartbeat = 25;
-        private const int MaxMessagesToRead = 256;
+        private const int ConsensusHeartbeat = 250;
+        private const int MaxMessagesToRead = 1024;
         private readonly BlockingCollection<RavenTransportMessage> _workQueue; 
 
         public RavenFactory RavenFactory { get; set; }
@@ -47,6 +47,7 @@ namespace NServiceBus.Transports.RavenDB
 
         public void Start(int maximumConcurrencyLevel)
         {
+            maximumConcurrencyLevel = 10;
             if (_address.Queue != EndpointName) return; //TODO: how to handle retries/timeouts/etc
 
             _tokenSource = new CancellationTokenSource();
@@ -208,7 +209,7 @@ namespace NServiceBus.Transports.RavenDB
             }
         }
 
-        public static Queue<string> RecentMessages = new FixedSizedQueue<string>(1000);
+        public static Queue<string> RecentMessages = new FixedSizedQueue<string>(5 * MaxMessagesToRead);
         public static ConcurrentDictionary<string, byte> InProgress = new ConcurrentDictionary<string, byte>();
         void Follow()
         {
