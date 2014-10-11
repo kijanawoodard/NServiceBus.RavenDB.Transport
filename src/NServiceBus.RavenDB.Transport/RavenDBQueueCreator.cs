@@ -12,10 +12,16 @@ namespace NServiceBus.Transports.RavenDB
         {
             if (address.Queue.StartsWith(EndpointName) && address.Queue != EndpointName) return; //combine all queues for an endpoint in one db
 
-            RavenFactory
-                .FindDocumentStore(address.Queue)
+            var store = RavenFactory
+                .FindDocumentStore(address.Queue);
+
+            store
                 .DatabaseCommands.GlobalAdmin
                 .EnsureDatabaseExists(address.Queue);
+
+            var commands = store.DatabaseCommands.ForDatabase(address.Queue);
+            new RavenTransportMessageIndex().Execute(commands, store.Conventions);
+
             //todo: log that we are creating db
         }
     }

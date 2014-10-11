@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using NServiceBus.Unicast;
+using Raven.Client.Indexes;
 
 namespace NServiceBus.Transports.RavenDB
 {
@@ -63,6 +65,27 @@ namespace NServiceBus.Transports.RavenDB
 
         public RavenTransportMessage()
         {
+
+        }
+    }
+
+    class RavenTransportMessageIndex : AbstractIndexCreationTask<RavenTransportMessage>
+    {
+        public RavenTransportMessageIndex()
+        {
+            Map = messages =>
+                from message in messages
+                select new
+                {
+                    message.TransportMessageId,
+                    message.CorrelationId,
+                    message.ReplyToAddress,
+                    message.MessageIntent,
+                    message.Destination,
+                    message.Outbound,
+                    message.SequenceNumber,
+                    message.ClaimTicket
+                };
 
         }
     }

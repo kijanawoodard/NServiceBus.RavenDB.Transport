@@ -47,7 +47,6 @@ namespace NServiceBus.Transports.RavenDB
 
         public void Start(int maximumConcurrencyLevel)
         {
-            maximumConcurrencyLevel = 10;
             if (_address.Queue != EndpointName) return; //TODO: how to handle retries/timeouts/etc
 
             _tokenSource = new CancellationTokenSource();
@@ -62,12 +61,25 @@ namespace NServiceBus.Transports.RavenDB
 
         public void Stop()
         {
-            if (_tokenSource == null)
+            Console.WriteLine("shutting down... {0}, {1}", _workQueue.Count, InProgress.Count);
+            while (_workQueue.Count > 0)
             {
-                return;
+                Thread.Sleep(100);
+                Console.WriteLine("shutting down... {0}, {1}", _workQueue.Count, InProgress.Count);
             }
 
-            _tokenSource.Cancel();
+            Thread.Sleep(300); //lost in transition
+
+            while (InProgress.Count > 0)
+            {
+                Thread.Sleep(100);
+                Console.WriteLine("shutting down in progress... {0}, {1}", _workQueue.Count, InProgress.Count);
+            } 
+            
+            if (_tokenSource != null)
+            {
+                _tokenSource.Cancel();
+            }
         }
 
         private void StartLeader()
@@ -104,7 +116,7 @@ namespace NServiceBus.Transports.RavenDB
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var sleep = ThreadLocalRandom.Next(ConsensusHeartbeat, ConsensusHeartbeat * 2); //add jitter to reduce conflicts
+                var sleep = ThreadLocalRandom.Next(ConsensusHeartbeat * 2, ConsensusHeartbeat * 4); //add jitter to reduce conflicts
                 Thread.Sleep(sleep); 
                 try
                 {
@@ -206,6 +218,7 @@ namespace NServiceBus.Transports.RavenDB
                 dead.ForEach(session.Delete);
 
                 session.SaveChanges();
+                Console.WriteLine("follower... {0}, {1}", _workQueue.Count, InProgress.Count);
             }
         }
 
@@ -238,10 +251,11 @@ namespace NServiceBus.Transports.RavenDB
                     }
 
                     Thread.Sleep(10); //make sure workers have enough time to get their work in the InProgress collection 
-
-                    me.LastSequenceNumber = 0;
-                    RecentMessages.Clear();
+                    RecentMessages.Clear(); //we're clearing the decks, so forget what we've seen and rely on db
                 }
+
+                if (RecentMessages.Count == 0)
+                    me.LastSequenceNumber = 0;
 
 
                 if (leadership.Status == Leadership.ClusterStatus.Harmony
@@ -252,7 +266,7 @@ namespace NServiceBus.Transports.RavenDB
                     var take = MaxMessagesToRead - _workQueue.Count;
                     
                     var messages =
-                        session.Query<RavenTransportMessage>()
+                        session.Query<RavenTransportMessage, RavenTransportMessageIndex>()
                             .Where(x => x.Destination == _address.Queue)
                             .Where(x => x.ClaimTicket >= assignment.LowerBound && x.ClaimTicket <= assignment.UpperBound) //todo: tests
                             .Where(x => x.SequenceNumber >= me.LastSequenceNumber)
@@ -282,12 +296,10 @@ namespace NServiceBus.Transports.RavenDB
             using (var session = RavenFactory.StartSession(transportMessage.Id))
             {
                 Exception exception = null;
-                session.Store(message); //attach message to session
-
+                
                 try
                 {
                     _tryProcessMessage(transportMessage);
-                    session.Delete(message);
                 }
                 catch (Exception e)
                 {
@@ -299,6 +311,10 @@ namespace NServiceBus.Transports.RavenDB
                 }
 
                 _endProcessMessage(transportMessage, exception);
+                
+                session.Store(message); //attach message to session
+                session.Delete(message);
+                //message.Destination = "trash";
                 session.SaveChanges();
             }
         }

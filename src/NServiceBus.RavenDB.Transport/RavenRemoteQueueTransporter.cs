@@ -91,7 +91,7 @@ namespace NServiceBus.Transports.RavenDB
                 var skip = _slowDestinations.Keys.ToList();
 
                 outboundMessages =
-                    session.Query<RavenTransportMessage>()
+                    session.Query<RavenTransportMessage, RavenTransportMessageIndex>()
                         .Where(x => x.Outbound)
                         .Where(x => x.Destination != _endpointName)
                         .Where(x => !x.Destination.In(skip))

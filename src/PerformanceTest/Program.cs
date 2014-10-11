@@ -19,7 +19,9 @@ namespace Runner
     {
         static void Main(string[] args)
         {
-            args = new[] { "10", "1000", "json", "", "volatile", "", "", "10", "" };
+            //args = new[] { "1", "10000", "json", "ravendb", "volatile", "", "", "10", "" };
+            Console.WriteLine(args.Length);
+            Console.WriteLine(args[0]);
             var testCaseToRun = args[0];
 
             int numberOfThreads;
@@ -36,12 +38,12 @@ namespace Runner
 
             var volatileMode = true;//(args[4].ToLower() == "volatile");
             var suppressDTC = true;//(args[4].ToLower() == "suppressdtc");
-            var twoPhaseCommit = (args[4].ToLower() == "twophasecommit");
-            var saga = (args[5].ToLower() == "sagamessages");
-            var encryption = (args[5].ToLower() == "encryption");
-            var concurrency = int.Parse(args[7]);
+            var twoPhaseCommit = false;//(args[4].ToLower() == "twophasecommit");
+            var saga = false;//(args[5].ToLower() == "sagamessages");
+            var encryption = false;//(args[5].ToLower() == "encryption");
+            var concurrency = 10; //int.Parse(args[7]);
 
-            //TransportConfigOverride.MaximumConcurrencyLevel = numberOfThreads;
+            TransportConfigOverride.MaximumConcurrencyLevel = numberOfThreads;
 
             var numberOfMessages = int.Parse(args[1]);
 
@@ -125,11 +127,12 @@ namespace Runner
                 startableBus.Start();
 
                 while (Interlocked.Read(ref Statistics.NumberOfMessages) < numberOfMessages)
-                    Thread.Sleep(1000);
+                    Thread.Sleep(100);
 
                 DumpSetting(args);
                 Statistics.Dump();
-                Console.ReadLine();
+                //Thread.Sleep(10 * 1000);
+                //Console.ReadLine();
             }
         }
 

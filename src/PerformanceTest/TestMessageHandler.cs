@@ -16,7 +16,7 @@
             {
                 Statistics.First = DateTime.Now;
             }
-            Interlocked.Increment(ref Statistics.NumberOfMessages);
+            //Interlocked.Increment(ref Statistics.NumberOfMessages);
 
             if (message.TwoPhaseCommit)
             {
