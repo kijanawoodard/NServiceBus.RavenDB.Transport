@@ -19,7 +19,10 @@ namespace Runner
     {
         static void Main(string[] args)
         {
-            //args = new[] { "1", "10000", "json", "ravendb", "volatile", "", "", "10", "" };
+            if(!args.Any())
+            {
+                args = new[] {"4", "100", "json", "ravendb", "volatile", "", "", "10", ""};
+            }
             Console.WriteLine(args.Length);
             Console.WriteLine(args[0]);
             var testCaseToRun = args[0];

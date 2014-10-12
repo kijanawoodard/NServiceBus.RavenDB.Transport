@@ -53,9 +53,9 @@ namespace NServiceBus.Transports.RavenDB
             StartLeader();
             StartFollower();
 
-            for (var i = 0; i < maximumConcurrencyLevel; i++)
+            for (var id = 1; id <= maximumConcurrencyLevel; id++)
             {
-                StartWorker();
+                StartWorker((byte)id);
             }
         }
 
@@ -64,22 +64,20 @@ namespace NServiceBus.Transports.RavenDB
             Console.WriteLine("shutting down... {0}, {1}", _workQueue.Count, InProgress.Count);
             while (_workQueue.Count > 0)
             {
-                Thread.Sleep(100);
+                Thread.Sleep(ConsensusHeartbeat);
                 Console.WriteLine("shutting down... {0}, {1}", _workQueue.Count, InProgress.Count);
             }
 
-            Thread.Sleep(300); //lost in transition
-
-            while (InProgress.Count > 0)
-            {
-                Thread.Sleep(100);
-                Console.WriteLine("shutting down in progress... {0}, {1}", _workQueue.Count, InProgress.Count);
-            } 
-            
             if (_tokenSource != null)
             {
                 _tokenSource.Cancel();
             }
+
+            while (InProgress.Count > 0)
+            {
+                Thread.Sleep(ConsensusHeartbeat);
+                Console.WriteLine("shutting down in progress... {0}, {1}", _workQueue.Count, InProgress.Count);
+            } 
         }
 
         private void StartLeader()
@@ -102,13 +100,13 @@ namespace NServiceBus.Transports.RavenDB
                     TaskContinuationOptions.OnlyOnFaulted);
         }
 
-        private void StartWorker()
+        private void StartWorker(byte id)
         {
             var token = _tokenSource.Token;
             Task
-                .Run(() => WorkerLoop(token), token)
+                .Run(() => WorkerLoop(id, token), token)
                 .ContinueWith(
-                    Continuation(StartWorker), 
+                    Continuation(() => StartWorker(id)), 
                     TaskContinuationOptions.OnlyOnFaulted);
         }
 
@@ -138,20 +136,23 @@ namespace NServiceBus.Transports.RavenDB
             }
         }
 
-        void WorkerLoop(CancellationToken cancellationToken)
+        void WorkerLoop(byte id, CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var message = _workQueue.Take(cancellationToken);
-                InProgress.TryAdd(message.Id, 0);
                 try
                 {
+                    InProgress.TryAdd(id, string.Empty);
+                    RavenTransportMessage message;
+                    var found = _workQueue.TryTake(out message, ConsensusHeartbeat);
+                    if (!found) continue;
+                    InProgress.TryUpdate(id, message.Id, string.Empty);
                     Work(message);
                 }
                 finally
                 {
-                    byte trash;
-                    InProgress.TryRemove(message.Id, out trash);   
+                    string trash;
+                    InProgress.TryRemove(id, out trash);   
                 }
             }
         }
@@ -223,7 +224,7 @@ namespace NServiceBus.Transports.RavenDB
         }
 
         public static Queue<string> RecentMessages = new FixedSizedQueue<string>(5 * MaxMessagesToRead);
-        public static ConcurrentDictionary<string, byte> InProgress = new ConcurrentDictionary<string, byte>();
+        public static ConcurrentDictionary<byte, string> InProgress = new ConcurrentDictionary<byte, string>();
         void Follow()
         {
             using (var session = RavenFactory.OpenSession())
@@ -282,7 +283,8 @@ namespace NServiceBus.Transports.RavenDB
                         me.LastSequenceNumber = messages.Last().SequenceNumber;
                 }
 
-                me.MakeReportForLeader(leadership, InProgress.Select(x => x.Key).ToList());
+                var progress = InProgress.Select(x => string.Format("{0}: {1}", x.Key, x.Value)).ToList();
+                me.MakeReportForLeader(leadership, progress);
                 session.SaveChanges();
             }
         }
@@ -321,6 +323,8 @@ namespace NServiceBus.Transports.RavenDB
 
         public void Dispose()
         {
+            if (_workQueue !=null) _workQueue.Dispose();
+            if (_tokenSource != null) _tokenSource.Dispose();
             //Injected todo: ask what "injected" means in sql transport project Dispose
         }
     }

@@ -8,7 +8,7 @@ using Raven.Client.Linq;
 
 namespace NServiceBus.Transports.RavenDB
 {
-    class RavenRemoteQueueTransporter
+    class RavenRemoteQueueTransporter : IDisposable
     {
         private readonly RavenFactory _ravenFactory;
         private readonly string _endpointName;
@@ -176,6 +176,11 @@ namespace NServiceBus.Transports.RavenDB
             }
 
             _tokenSource.Cancel();
+        }
+
+        public void Dispose()
+        {
+            if (_tokenSource != null) _tokenSource.Dispose();
         }
     }
 
