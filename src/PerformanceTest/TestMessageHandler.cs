@@ -12,10 +12,10 @@
 
         public void Handle(TestMessage message)
         {
-            if (!Statistics.First.HasValue)
-            {
-                Statistics.First = DateTime.Now;
-            }
+//            if (!Statistics.First.HasValue)
+//            {
+//                Statistics.First = DateTime.Now;
+//            }
             //Interlocked.Increment(ref Statistics.NumberOfMessages);
 
             if (message.TwoPhaseCommit)
@@ -23,7 +23,7 @@
                 Transaction.Current.EnlistDurable(Guid.NewGuid(), enlistment, EnlistmentOptions.None);
             }
 
-            Statistics.Last = DateTime.Now;
+            //Statistics.Last = DateTime.Now;
         }
     }
 }
