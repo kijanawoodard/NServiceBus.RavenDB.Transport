@@ -61,7 +61,8 @@ namespace NServiceBus.Transports.RavenDB
             {
                 try
                 {
-                    Work();
+                    var time = Utilities.Time(Work);
+                    //Console.WriteLine("Remote Queue Time: {0:N0}", time.TotalMilliseconds);
                     Thread.Sleep(500); //bleh; temporary
                 }
                 catch (Exception)

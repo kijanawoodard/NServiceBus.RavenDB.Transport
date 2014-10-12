@@ -1,11 +1,13 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NServiceBus.Features;
 using NServiceBus.Logging;
 using Raven.Abstractions.Exceptions;
+using Raven.Client;
 
 namespace NServiceBus.Transports.RavenDB
 {
@@ -22,7 +24,7 @@ namespace NServiceBus.Transports.RavenDB
         private Address _address;
 
         private const int ConsensusHeartbeat = 250;
-        private const int MaxMessagesToRead = 1024;
+        private const int MaxMessagesToRead = 256;
         private readonly BlockingCollection<RavenTransportMessage> _workQueue; 
 
         public RavenFactory RavenFactory { get; set; }
@@ -118,7 +120,8 @@ namespace NServiceBus.Transports.RavenDB
                 Thread.Sleep(sleep); 
                 try
                 {
-                    Lead();
+                    var time = Utilities.Time(Lead);
+                    Console.WriteLine("Leader Time: {0:N0}", time.TotalMilliseconds);
                 }
                 catch (ConcurrencyException)
                 {
@@ -132,7 +135,8 @@ namespace NServiceBus.Transports.RavenDB
             while (!cancellationToken.IsCancellationRequested)
             {
                 Thread.Sleep(ConsensusHeartbeat); 
-                Follow();
+                var time = Utilities.Time(Follow);
+                Console.WriteLine("Follower Time: {0:N0}", time.TotalMilliseconds);
             }
         }
 
@@ -147,7 +151,9 @@ namespace NServiceBus.Transports.RavenDB
                     var found = _workQueue.TryTake(out message, ConsensusHeartbeat);
                     if (!found) continue;
                     InProgress.TryUpdate(id, message.Id, string.Empty);
-                    Work(message);
+                    
+                    var time = Utilities.Time(() => Work(message));
+                    //Console.WriteLine("Worker {0} Time: {1:N0}", id, time.TotalMilliseconds);
                 }
                 finally
                 {
@@ -219,12 +225,13 @@ namespace NServiceBus.Transports.RavenDB
                 dead.ForEach(session.Delete);
 
                 session.SaveChanges();
-                Console.WriteLine("follower... {0}, {1}", _workQueue.Count, InProgress.Count);
+                Console.WriteLine("counts... {0}, {1}", _workQueue.Count, InProgress.Count);
             }
         }
 
         public static Queue<string> RecentMessages = new FixedSizedQueue<string>(5 * MaxMessagesToRead);
         public static ConcurrentDictionary<byte, string> InProgress = new ConcurrentDictionary<byte, string>();
+
         void Follow()
         {
             using (var session = RavenFactory.OpenSession())
@@ -258,23 +265,27 @@ namespace NServiceBus.Transports.RavenDB
                 if (RecentMessages.Count == 0)
                     me.LastSequenceNumber = 0;
 
-
                 if (leadership.Status == Leadership.ClusterStatus.Harmony
                     && leadership.HasAssignment(ProcessIdentity))
                 {
                     var assignment = leadership.GetAssignment(ProcessIdentity);
                 
                     var take = MaxMessagesToRead - _workQueue.Count;
-                    
+
+                    RavenQueryStatistics stats = null;
+
                     var messages =
                         session.Query<RavenTransportMessage, RavenTransportMessageIndex>()
+                            .Statistics(out stats)
                             .Where(x => x.Destination == _address.Queue)
-                            .Where(x => x.ClaimTicket >= assignment.LowerBound && x.ClaimTicket <= assignment.UpperBound) //todo: tests
+                            .Where( x => x.ClaimTicket >= assignment.LowerBound && x.ClaimTicket <= assignment.UpperBound)
                             .Where(x => x.SequenceNumber >= me.LastSequenceNumber)
                             .OrderBy(x => x.SequenceNumber)
-                            .Take(take) 
+                            .Take(take)
                             .ToList();
 
+                    Console.WriteLine("Follower Query Stats: {0:N0}", stats.DurationMilliseconds);
+                    
                     messages = messages.Where(x => !RecentMessages.Contains(x.Id)).ToList();
                     messages.ForEach(_workQueue.Add);
                     messages.Select(x => x.Id).ToList().ForEach(RecentMessages.Enqueue);
@@ -283,7 +294,7 @@ namespace NServiceBus.Transports.RavenDB
                         me.LastSequenceNumber = messages.Last().SequenceNumber;
                 }
 
-                var progress = InProgress.Select(x => string.Format("{0}: {1}", x.Key, x.Value)).ToList();
+                var progress = InProgress.Select(x => x.Value).Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
                 me.MakeReportForLeader(leadership, progress);
                 session.SaveChanges();
             }
@@ -326,6 +337,17 @@ namespace NServiceBus.Transports.RavenDB
             if (_workQueue !=null) _workQueue.Dispose();
             if (_tokenSource != null) _tokenSource.Dispose();
             //Injected todo: ask what "injected" means in sql transport project Dispose
+        }
+    }
+
+    public static class Utilities
+    {
+        public static TimeSpan Time(Action action)
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            action();
+            stopwatch.Stop();
+            return stopwatch.Elapsed;
         }
     }
 
