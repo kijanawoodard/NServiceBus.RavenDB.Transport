@@ -8,6 +8,7 @@ using NServiceBus.Features;
 using NServiceBus.Logging;
 using Raven.Abstractions.Exceptions;
 using Raven.Client;
+using Raven.Client.Document;
 
 namespace NServiceBus.Transports.RavenDB
 {
@@ -24,7 +25,7 @@ namespace NServiceBus.Transports.RavenDB
         private Address _address;
 
         private const int ConsensusHeartbeat = 250;
-        private const int MaxMessagesToRead = 256;
+        private const int MaxMessagesToRead = 1024;
         private readonly BlockingCollection<RavenTransportMessage> _workQueue; 
 
         public RavenFactory RavenFactory { get; set; }
@@ -329,6 +330,7 @@ namespace NServiceBus.Transports.RavenDB
                 session.Delete(message);
                 //message.Destination = "trash";
                 session.SaveChanges();
+                //session.Advanced.DocumentStore.DatabaseCommands.ForDatabase((session as DocumentSession).DatabaseName).Delete(message.Id, null);
             }
         }
 

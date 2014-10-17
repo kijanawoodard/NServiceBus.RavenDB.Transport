@@ -1,6 +1,5 @@
 
 using System;
-using NServiceBus.Persistence;
 using Tryout.Server.Messages.Commands;
 using Tryout.Server.Messages.Events;
 
